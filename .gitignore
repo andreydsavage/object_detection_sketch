@@ -1,5 +1,6 @@
 *venv
-src/utils/__pycache__
+*__pycache__
 *.jpg
 *.mp4
-*configs
+*.pth
+*.pt

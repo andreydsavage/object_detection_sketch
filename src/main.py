@@ -1,6 +1,10 @@
 import torch
 import torchvision
 import cv2
+import json
+import os
+import time
+from collections import defaultdict
 import numpy as np
 from PIL import Image
 from pathlib import Path
@@ -21,6 +25,8 @@ class Detector:
         """
         self.model_type = model_type.lower()
         self.score_threshold = score_threshold
+        self.output_path = Path('data/output/')
+        os.makedirs(self.output_path, exist_ok=True)
         
         # Определяем устройство
         if device is None:
@@ -41,7 +47,16 @@ class Detector:
     def _init_frcnn(self):
         """Инициализация Faster R-CNN модели"""
         print("Загрузка Faster R-CNN модели...")
-        self.model = torchvision.models.detection.fasterrcnn_resnet50_fpn(pretrained=True)
+        weights_path = Path('src/models/fasterrcnn_resnet50_fpn.pth')
+        if weights_path.exists():
+            print('Используем локальную модель')
+            self.model = torchvision.models.detection.fasterrcnn_resnet50_fpn(pretrained=False,)
+            state_dict = torch.load(weights_path, map_location='cpu')
+            self.model.load_state_dict(state_dict)
+
+        else:
+            print('Загружаем модель из интернета')
+            self.model = torchvision.models.detection.fasterrcnn_resnet50_fpn(pretrained=True)
         self.model.to(self.device)
         self.model.eval()
         
@@ -149,7 +164,7 @@ class Detector:
         
         # Извлекаем данные
         boxes = results[0].boxes.xyxy
-        boxes = boxes.numpy()
+        boxes = boxes.cpu().numpy()
         scores = [box.conf[0].item() for box in results[0].boxes]
         labels = [int(box.cls) for box in results[0].boxes]
         
@@ -207,7 +222,7 @@ class Detector:
         
         return frame
     
-    def process_video(self, video_path, output_path=None, show=True, fps=30, classes = ['person']):
+    def process_video(self, video_path, show=True, fps=30, classes = ['person']):
         """
         Обработка видеофайла
         
@@ -229,11 +244,14 @@ class Detector:
         
         # Настраиваем видеозапись если нужно
         writer = None
-        if output_path:
-            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-            writer = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+        output_path = self.output_path
+        output_video_path = output_path / f'{self.model_type}'
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        writer = cv2.VideoWriter(output_video_path.with_suffix('.mp4'), fourcc, fps, (width, height))
         
         frame_count = 0
+        total_detections = defaultdict(int)
+        latencies = []
         print(f"Начата обработка видео: {video_path}")
         
         while True:
@@ -241,8 +259,12 @@ class Detector:
             if not ret:
                 break
             
+            start_time = time.perf_counter()
             # Выполняем детекцию
             boxes, scores, labels, class_names = self.predict(frame)
+            for label in class_names:
+                total_detections[label] += 1 
+            
             
             # Визуализируем результаты
             result_frame = self.visualize(frame, boxes, scores, labels, class_names,
@@ -261,7 +283,30 @@ class Detector:
             frame_count += 1
             if frame_count % 30 == 0:
                 print(f"Обработано кадров: {frame_count}")
-        
+
+            end_time = time.perf_counter()
+            latency = (end_time - start_time) * 1000  # в миллисекундах
+            latencies.append(latency)
+
+        json_path = Path(output_video_path).with_suffix('.json')
+        with open(json_path, 'w') as f:
+            json.dump(dict(total_detections), f)
+
+        stats = {
+            'mean': np.mean(latencies),
+            'median': np.median(latencies),
+            'std': np.std(latencies),
+            'min': np.min(latencies),
+            'max': np.max(latencies),
+            'fps': 1000 / np.mean(latencies),  # FPS
+            'num_runs': len(latencies),
+            'p95': np.percentile(latencies, 95),
+            'p99': np.percentile(latencies, 99),
+        }
+        stats_path = (Path(str(output_video_path) + f'_{self.device}_stats')).with_suffix('.json')
+        with open(stats_path, 'w') as f:
+            json.dump(dict(stats), f)
+
         # Освобождаем ресурсы
         cap.release()
         if writer:
@@ -282,14 +327,12 @@ if __name__ == "__main__":
     parser.add_argument('--model', type=str, default='frcnn', 
                        choices=['frcnn', 'yolo'],
                        help='Тип модели для детекции (frcnn или yolo)')
-    parser.add_argument('--source', type=str, default='test.jpg',
+    parser.add_argument('--source', type=str, default='data/videos/crowd.mp4',
                        help='Путь к изображению или видео')
     parser.add_argument('--threshold', type=float, default=0.5,
                        help='Порог уверенности для детекций')
     parser.add_argument('--device', type=str, default=None,
                        help='Устройство для вычислений (cuda или cpu)')
-    parser.add_argument('--output', type=str, default='src/data/outputs.mp4',
-                       help='Путь для сохранения результата')
     parser.add_argument('--no-show', action='store_true',
                        help='Не показывать результат')
     parser.add_argument('--classes', type=str, default='person',
@@ -313,7 +356,6 @@ if __name__ == "__main__":
         print(f"Обработка видео: {args.source}")
         detector.process_video(
             video_path=args.source,
-            output_path=args.output,
             show=not args.no_show,
             classes=args.classes
         )
