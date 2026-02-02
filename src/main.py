@@ -160,14 +160,20 @@ class Detector:
     def _predict_yolo(self, pil_image):
         """Предсказание с использованием YOLO"""
 
-        results = self.model(pil_image)  # Можно настроить размер
+        results = self.model(pil_image, imgsz =1920)# Можно настроить размер
         
         # Извлекаем данные
         boxes = results[0].boxes.xyxy
         boxes = boxes.cpu().numpy()
-        scores = [box.conf[0].item() for box in results[0].boxes]
-        labels = [int(box.cls) for box in results[0].boxes]
+        scores = np.array([box.conf[0].item() for box in results[0].boxes])
+        labels = np.array([int(box.cls) for box in results[0].boxes])
         
+                # Фильтруем по порогу уверенности
+        keep = scores >= self.score_threshold
+        boxes = boxes[keep]
+        scores = scores[keep]
+        labels = labels[keep]
+
         # Получаем имена классов
         class_names = [results[0].names[label] for label in labels]
         
@@ -241,13 +247,17 @@ class Detector:
         # Получаем параметры видео
         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+        scale = 0.5
+        new_width = int(width * scale)
+        new_height = int(height * scale)
         
         # Настраиваем видеозапись если нужно
         writer = None
         output_path = self.output_path
         output_video_path = output_path / f'{self.model_type}'
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-        writer = cv2.VideoWriter(output_video_path.with_suffix('.mp4'), fourcc, fps, (width, height))
+        writer = cv2.VideoWriter(output_video_path.with_suffix('.mp4'), fourcc, fps, (new_width, new_height))
         
         frame_count = 0
         total_detections = defaultdict(int)
@@ -269,7 +279,7 @@ class Detector:
             # Визуализируем результаты
             result_frame = self.visualize(frame, boxes, scores, labels, class_names,
                                           classes)
-            
+            result_frame = cv2.resize(result_frame, (new_width, new_height))
             # Сохраняем если нужно
             if writer:
                 writer.write(result_frame)

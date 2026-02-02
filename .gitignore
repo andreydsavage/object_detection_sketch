@@ -1,6 +1,5 @@
 *venv
 *__pycache__
 *.jpg
-*.mp4
 *.pth
 *.pt
