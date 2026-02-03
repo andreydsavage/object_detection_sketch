@@ -86,7 +86,7 @@ class Detector:
         else:
             print('Загружаем модель из интернета')
             self.model = YOLO('yolo26n.pt')
-        
+        self.model.to(self.device)
     
     def preprocess(self, frame):
         """
