@@ -1,3 +1,7 @@
 ultralytics
 opencv-python
 opencv-contrib-python
+onnx
+onnxruntime
+onnxscript
+onnxruntime-gpu

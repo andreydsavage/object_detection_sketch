@@ -1,5 +1,9 @@
 *venv
+.vscode
 *__pycache__
 *.jpg
 *.pth
 *.pt
+tests/
+*.mp4
+*.onnx
