@@ -5,3 +5,4 @@ onnx
 onnxruntime
 onnxscript
 onnxruntime-gpu
+seaborn

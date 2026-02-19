@@ -1,7 +1,10 @@
 import argparse
 from pathlib import Path
 
-from utils.detector_factory import DetectorFactory
+from myUtils.detector_factory import DetectorFactory
+
+import warnings
+warnings.filterwarnings('ignore')
 
 if __name__ == "__main__":
 
@@ -11,8 +14,8 @@ if __name__ == "__main__":
     parser.add_argument('--source', type=str, default='data/videos/crowd.mp4',
                        help='Путь к изображению или видео')
     parser.add_argument('--model', type=str, default='frcnn', 
-                       choices=['frcnn', 'frcnn_onnx'],
-                       help='Тип модели для детекции (frcnn или yolo)')
+                       choices=['frcnn', 'frcnn_onnx', 'yolo', 'yolo_tensor', 'yolo_tensorRT'],
+                       help='Тип модели для детекции (frcnn или frcnn_onnx)')
     parser.add_argument('--threshold', type=float, default=0.5,
                        help='Порог уверенности для детекций')
     parser.add_argument('--no-show', action='store_true',
@@ -30,3 +33,4 @@ if __name__ == "__main__":
                            show=not args.no_show,
                            classes=args.classes
                 )
+    
